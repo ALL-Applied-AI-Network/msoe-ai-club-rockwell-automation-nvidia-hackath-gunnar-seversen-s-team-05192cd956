@@ -1,0 +1,43 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Pipeline outputs (captures, frames, reports) and generated textures
+runs/
+frames*/
+gripper_shots/
+fanuc_er4ia_sim/textures/
+sweeps/
+
+# Media and archives (recon photos in docs/cell-recon/ are tracked on purpose)
+*.mp4
+*.mov
+*.avi
+*.zip
+*.tar.gz
+
+# Model weights and caches
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.gguf
+*.onnx
+hf_cache/
+.cache/
+Cosmos3-Nano*/
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
