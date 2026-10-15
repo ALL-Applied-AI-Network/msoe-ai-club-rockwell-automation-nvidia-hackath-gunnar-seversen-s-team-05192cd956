@@ -285,7 +285,10 @@ CUBE_STACK_SITE_TOLERANCE = CUBE_EDGE / 3
 CUBE_STACK_LAYER_TOLERANCE = (
     CUBE_EDGE / 4
 )  # adjacent centres retain at least 75% overlap per axis
-CUBE_LAYOUT_SEED = 20261009
+import os
+
+# Override per run for seed sweeps; every stage's interpreter reads the same env.
+CUBE_LAYOUT_SEED = int(os.environ.get("CUBE_LAYOUT_SEED", "20261009"))
 
 
 def hackathon_cubes(seed):
