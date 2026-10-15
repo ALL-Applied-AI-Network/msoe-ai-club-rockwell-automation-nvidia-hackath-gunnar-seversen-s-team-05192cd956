@@ -3,6 +3,8 @@
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -36,6 +38,27 @@ class RuntimeConfigTests(unittest.TestCase):
             with patch.dict(os.environ, {"COSMOS3_NANO_PATH": directory}, clear=True):
                 with self.assertRaisesRegex(SystemExit, "missing config.json"):
                     _find_nano()
+
+    def test_layout_seed_comes_from_environment(self):
+        # Fresh interpreters, as each pipeline stage imports scene_config anew.
+        script = (
+            "import json, scene_config as C; "
+            "print(json.dumps([C.CUBE_LAYOUT_SEED, "
+            "C.SORT_CUBES == C.hackathon_cubes(C.CUBE_LAYOUT_SEED)]))"
+        )
+        here = str(Path(__file__).resolve().parent)
+        env = {k: v for k, v in os.environ.items() if k != "CUBE_LAYOUT_SEED"}
+        default = subprocess.run(
+            [sys.executable, "-c", script], cwd=here, env=env, capture_output=True
+        )
+        chosen = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=here,
+            env=dict(env, CUBE_LAYOUT_SEED="7"),
+            capture_output=True,
+        )
+        self.assertEqual(json.loads(default.stdout), [20261009, True])
+        self.assertEqual(json.loads(chosen.stdout), [7, True])
 
 
 if __name__ == "__main__":
