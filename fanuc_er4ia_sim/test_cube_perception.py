@@ -5,9 +5,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 import json
+import re
 import cv2
 import numpy as np
-from perceive import audit_stack_colours, parse_json
+from perceive import CUBE_POSE_PROMPT, audit_stack_colours, parse_json
 
 
 class CubePerceptionTests(unittest.TestCase):
@@ -66,6 +67,11 @@ class CubePerceptionTests(unittest.TestCase):
             parse_json('```json\n[{"category":"cube"}]\n```'),
             {"objects": [{"category": "cube"}]},
         )
+
+    def test_cube_pose_prompt_has_no_example_yaw_to_copy(self):
+        # Cosmos echoed the old example yaw (14.2) instead of the measured one.
+        self.assertIsNone(re.search(r'"yaw_deg"\s*:\s*-?\d', CUBE_POSE_PROMPT))
+        self.assertIn("<measured yaw_deg>", CUBE_POSE_PROMPT)
 
 
 if __name__ == "__main__":
