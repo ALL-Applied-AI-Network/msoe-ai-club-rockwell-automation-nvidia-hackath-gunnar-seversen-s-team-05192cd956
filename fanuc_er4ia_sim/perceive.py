@@ -338,7 +338,7 @@ def inspect_cube_poses(model, processor, image_path, parsed, run):
         measurement = dict(
             expected_colour=obj["colour"],
             position_world_m=[*xy, cam.table_z + C.CUBE_EDGE / 2],
-            yaw_deg=round(yaw, 4),
+            yaw_deg=round(yaw % 90, 4),
             roll_deg=0,
             pitch_deg=0,
             silhouette_iou=quality,
