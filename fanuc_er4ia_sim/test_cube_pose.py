@@ -171,6 +171,33 @@ class CubePoseTests(unittest.TestCase):
                 [0.35, 0.15, self.cam.table_z + C.CUBE_EDGE / 2],
             )
 
+    def test_negative_yaw_is_shown_to_cosmos_in_square_range(self):
+        # Cosmos dropped the sign or mis-converted negative measured yaws.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            im = root / "im.png"
+            cv2.imwrite(str(im), np.zeros((1080, 1920, 3), np.uint8))
+            (root / "camera.json").write_text(json.dumps(self.cam.j))
+            answer = {
+                "category": "cube",
+                "colour": "yellow",
+                "yaw_deg": 88.0,
+                "pose_confidence": 0.9,
+            }
+            obj = dict(category="cube", colour="yellow", center=[0.5, 0.5])
+            with patch("perceive.ask", return_value=json.dumps(answer)) as ask, patch(
+                "cube_pose.refine_pose",
+                return_value=(np.array([0.35, 0.15]), -2.0, 0.95),
+            ):
+                parsed = inspect_cube_poses(None, None, im, {"objects": [obj]}, root)
+            self.assertIn('"yaw_deg": 88.0', ask.call_args.args[3])
+            observed = parsed["objects"][0]
+            self.assertEqual(observed["pose_confidence"], 0.9)
+            self.assertAlmostEqual(observed["pose_world"]["yaw_deg"], -2.0)
+            self.assertAlmostEqual(
+                edge_pose(self.cam, observed["top_edge_endpoints"]), -2.0
+            )
+
     def test_cosmos_cannot_replace_measurement_with_invented_pose(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
