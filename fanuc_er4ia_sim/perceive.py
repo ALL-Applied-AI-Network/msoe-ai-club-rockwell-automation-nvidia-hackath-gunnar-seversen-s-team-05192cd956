@@ -141,7 +141,50 @@ bbox is [x_min,y_min,x_max,y_max]. Use category cube, and colour yellow, blue,
 red, or unknown if ambiguous. Up to 12 cubes may be present."""
 
 
-def audit_stack_colours(model, processor, image_path, parsed, run):
+def work_surface_crop(image_path, run):
+    """Crop the table image to the work surface the planner accepts.
+
+    Cosmos labelled parts of the parked gripper as cubes; cubes are only ever
+    accepted on this calibrated surface, so detection only looks there. No GT.
+    """
+    import cv2
+    import numpy as np
+    from backproject import CameraModel
+    import scene_config as C
+
+    im = cv2.imread(str(image_path))
+    H, W = im.shape[:2]
+    cam = CameraModel(str(run / "camera.json"))
+    z = cam.table_z + C.CUBE_EDGE / 2
+    half = C.BACKDROP_WIDTH / 2
+    corners = np.array(
+        [cam.project([x, y, z]) for x in C.BACKDROP_X for y in (-half, half)]
+    )
+    x0, y0 = np.floor(corners.min(0)).astype(int).clip(0, [W, H])
+    x1, y1 = np.ceil(corners.max(0)).astype(int).clip(0, [W, H])
+    path = run / "work_surface_crop.png"
+    cv2.imwrite(str(path), im[y0:y1, x0:x1])
+    return path, (int(x0), int(y0), int(x1 - x0), int(y1 - y0))
+
+
+def crop_to_image(objects, window, W, H):
+    """Map detections made on a crop to unit coordinates of the full image."""
+    from plan_grasps import detect_coord_convention, make_as_pixels
+
+    x0, y0, cw, ch = window
+    convention, divisor = detect_coord_convention({"objects": objects}, cw, ch)
+    pixels = make_as_pixels(convention, divisor, cw, ch)
+    for obj in objects:
+        for key in ("center", "bbox"):
+            if obj.get(key) is not None:
+                obj[key] = [
+                    (v + x0) / W if j % 2 == 0 else (v + y0) / H
+                    for j, v in enumerate(pixels(obj[key]))
+                ]
+    return objects
+
+
+def audit_stack_colours(model, processor, image_path, parsed, run, crop=None):
     """Revisit missing colours in full and local views; no ground truth input."""
     from collections import Counter
     import cv2
@@ -205,9 +248,11 @@ left to right and y top to bottom. If none are visible, use {{"objects":[]}}."""
                 for o in answer.get("objects", [])
                 if o.get("category") == "cube" and o.get("colour") == colour
             ]
+            if crop is not None:
+                return crop_to_image(objects, crop[1], W, H)
             return normalize(objects, width, H, x_offset)
 
-        replacements = query(image_path, "audit", W)
+        replacements = query(crop[0] if crop else image_path, "audit", W)
         if len(replacements) != 2:
             # Image-only proposals for tiny blocks missed in the wide view.
             # Colour/size segmentation proposes patches; Cosmos must confirm
@@ -230,6 +275,11 @@ left to right and y top to bottom. If none are visible, use {{"objects":[]}}."""
                 )
             )
             mask &= (colour_gate & (hsv[:, :, 1] >= 55)).astype(np.uint8)
+            if crop is not None:
+                x0, y0, cw, ch = crop[1]
+                surface = np.zeros_like(mask)
+                surface[y0 : y0 + ch, x0 : x0 + cw] = 1
+                mask &= surface
             mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
             n, labels, stats, centers = cv2.connectedComponentsWithStats(mask, 8)
             confirmed = []
@@ -792,10 +842,11 @@ if __name__ == "__main__":
         prompt, stem, budget = SORT_PROMPT, "detections", 6500
     else:
         prompt, stem, budget = PROMPT, "detections", 3000
+    crop = work_surface_crop(img, run) if a.stack_cubes else None
     model, processor = load_model(a.gpu)
     # detection replies are pretty-printed JSON and run long; 8 objects with
     # bboxes overflowed a 1400-token budget mid-object and failed to parse
-    raw = ask(model, processor, img, prompt, max_new_tokens=budget)
+    raw = ask(model, processor, crop[0] if crop else img, prompt, max_new_tokens=budget)
 
     (run / f"{stem}_raw.txt").write_text(raw)
     parsed = parse_json(raw)
@@ -818,7 +869,11 @@ if __name__ == "__main__":
         sys.exit(1)
     parsed = canonicalise(parsed)
     if a.stack_cubes:
-        parsed = audit_stack_colours(model, processor, img, parsed, run)
+        import cv2
+
+        H, W = cv2.imread(str(img)).shape[:2]
+        parsed["objects"] = crop_to_image(parsed.get("objects", []), crop[1], W, H)
+        parsed = audit_stack_colours(model, processor, img, parsed, run, crop)
         parsed = inspect_cube_poses(model, processor, img, parsed, run)
         parsed["model"] = "Cosmos3-Nano"
         parsed["task"] = "cube_stack"
