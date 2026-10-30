@@ -184,7 +184,7 @@ def crop_to_image(objects, window, W, H):
     return objects
 
 
-def audit_stack_colours(model, processor, image_path, parsed, run, crop=None):
+def audit_stack_colours(model, processor, image_path, parsed, run, work_surface=None):
     """Revisit missing colours in full and local views; no ground truth input."""
     from collections import Counter
     import cv2
@@ -248,11 +248,13 @@ left to right and y top to bottom. If none are visible, use {{"objects":[]}}."""
                 for o in answer.get("objects", [])
                 if o.get("category") == "cube" and o.get("colour") == colour
             ]
-            if crop is not None:
-                return crop_to_image(objects, crop[1], W, H)
+            if work_surface is not None:
+                return crop_to_image(objects, work_surface[1], W, H)
             return normalize(objects, width, H, x_offset)
 
-        replacements = query(crop[0] if crop else image_path, "audit", W)
+        replacements = query(
+            work_surface[0] if work_surface else image_path, "audit", W
+        )
         if len(replacements) != 2:
             # Image-only proposals for tiny blocks missed in the wide view.
             # Colour/size segmentation proposes patches; Cosmos must confirm
@@ -275,8 +277,8 @@ left to right and y top to bottom. If none are visible, use {{"objects":[]}}."""
                 )
             )
             mask &= (colour_gate & (hsv[:, :, 1] >= 55)).astype(np.uint8)
-            if crop is not None:
-                x0, y0, cw, ch = crop[1]
+            if work_surface is not None:
+                x0, y0, cw, ch = work_surface[1]
                 surface = np.zeros_like(mask)
                 surface[y0 : y0 + ch, x0 : x0 + cw] = 1
                 mask &= surface

@@ -70,6 +70,25 @@ class CubePerceptionTests(unittest.TestCase):
                 result = audit_stack_colours(None, None, img, {"objects": []}, root)
         self.assertEqual(result["objects"], [])
 
+    def test_patch_search_does_not_replace_work_surface_crop(self):
+        # A real cell photo crashed: the yellow patch search reused the name of the
+        # work-surface crop, so the blue query read an image array as the crop.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            img = root / "world_camera.png"
+            im = np.zeros((1080, 1920, 3), np.uint8)
+            im[700:720, 900:920] = (40, 160, 200)
+            cv2.imwrite(str(img), im)
+            surface = (img, (0, 540, 1920, 540))
+            with patch("perceive.ask", return_value='{"objects":[]}') as ask:
+                result = audit_stack_colours(
+                    None, None, img, {"objects": []}, root, surface
+                )
+            candidate = root / "cube_inventory_crops" / "yellow_candidate1.png"
+            self.assertTrue(candidate.exists())
+        self.assertEqual(result["objects"], [])
+        self.assertEqual(ask.call_args_list[-1].args[2], img)
+
     def test_model_can_return_bare_detection_array(self):
         self.assertEqual(
             parse_json('```json\n[{"category":"cube"}]\n```'),
